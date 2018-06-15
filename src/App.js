@@ -1,6 +1,6 @@
 import React from 'react';
 import gql from 'graphql-tag';
-import { Query, Mutation } from 'react-apollo';
+import { Query, ApolloConsumer } from 'react-apollo';
 
 import './App.css';
 
@@ -21,104 +21,82 @@ const GET_REPOSITORIES_OF_ORGANIZATION = gql`
   }
 `;
 
-const STAR_REPOSITORY = gql`
-  mutation($id: ID!) {
-    addStar(input: { starrableId: $id }) {
-      starrable {
-        id
-        viewerHasStarred
-      }
-    }
-  }
-`;
-
-const App = () => (
-  <Query query={GET_REPOSITORIES_OF_ORGANIZATION}>
-    {({ data: { organization }, loading }) => {
-      if (loading || !organization) {
-        return <div>Loading ...</div>;
-      }
-
-      return (
-        <Repositories repositories={organization.repositories} />
-      );
-    }}
-  </Query>
-);
-
-class Repositories extends React.Component {
+class App extends React.Component {
   state = {
-    selectedRepositoryIds: [],
+    showRepositories: false,
   };
 
-  toggleSelectRepository = (id, isSelected) => {
-    let { selectedRepositoryIds } = this.state;
-
-    selectedRepositoryIds = isSelected
-      ? selectedRepositoryIds.filter(itemId => itemId !== id)
-      : selectedRepositoryIds.concat(id);
-
-    this.setState({ selectedRepositoryIds });
+  onShowRepositories = () => {
+    this.setState({ showRepositories: true });
   };
 
   render() {
+    if (!this.state.showRepositories) {
+      return (
+        <div>
+          <p>The button queries all repositories on hover.</p>
+          <p>
+            If you hover and click the button not immediately
+            afterward, there shouldn't be a loading indicator when
+            clicking the button eventually.
+          </p>
+          <p>
+            If you hover and click the button immediately afterward,
+            there may be still a loading indicator, because the
+            prefetching of the data wasn't completed.
+          </p>
+
+          <ShowRepositoriesButton
+            onShowRepositories={this.onShowRepositories}
+          >
+            Show Repositories (Queries on Hover)
+          </ShowRepositoriesButton>
+        </div>
+      );
+    }
+
     return (
-      <RepositoryList
-        repositories={this.props.repositories}
-        selectedRepositoryIds={this.state.selectedRepositoryIds}
-        toggleSelectRepository={this.toggleSelectRepository}
-      />
+      <Query query={GET_REPOSITORIES_OF_ORGANIZATION}>
+        {({ data: { organization }, loading }) => {
+          if (loading || !organization) {
+            return <div>Loading ...</div>;
+          }
+
+          return (
+            <Repositories repositories={organization.repositories} />
+          );
+        }}
+      </Query>
     );
   }
 }
 
-const RepositoryList = ({
-  repositories,
-  selectedRepositoryIds,
-  toggleSelectRepository,
-}) => (
-  <ul>
-    {repositories.edges.map(({ node }) => {
-      const isSelected = selectedRepositoryIds.includes(node.id);
-
-      const rowClassName = ['row'];
-
-      if (isSelected) {
-        rowClassName.push('row_selected');
-      }
-
-      return (
-        <li className={rowClassName.join(' ')} key={node.id}>
-          <Select
-            id={node.id}
-            isSelected={isSelected}
-            toggleSelectRepository={toggleSelectRepository}
-          />{' '}
-          <a href={node.url}>{node.name}</a>{' '}
-          {!node.viewerHasStarred && <Star id={node.id} />}
-        </li>
-      );
-    })}
-  </ul>
-);
-
-const Star = ({ id }) => (
-  <Mutation mutation={STAR_REPOSITORY} variables={{ id }}>
-    {starRepository => (
-      <button type="button" onClick={starRepository}>
-        Star
+const ShowRepositoriesButton = ({ onShowRepositories }) => (
+  <ApolloConsumer>
+    {client => (
+      <button
+        type="button"
+        onClick={onShowRepositories}
+        onMouseOver={() =>
+          client.query({
+            query: GET_REPOSITORIES_OF_ORGANIZATION,
+          })
+        }
+      >
+        Show Repositories
       </button>
     )}
-  </Mutation>
+  </ApolloConsumer>
 );
 
-const Select = ({ id, isSelected, toggleSelectRepository }) => (
-  <button
-    type="button"
-    onClick={() => toggleSelectRepository(id, isSelected)}
-  >
-    {isSelected ? 'Unselect' : 'Select'}
-  </button>
+const Repositories = ({ repositories }) => (
+  <ul>
+    {repositories.edges.map(({ node }) => (
+      <li key={node.id}>
+        <a href={node.url}>{node.name}</a>
+      </li>
+    ))}
+  </ul>
 );
 
 export default App;
